@@ -12,6 +12,14 @@ const productSchema = new mongoose.Schema({
     required: [true, 'Product description is required'],
     maxlength: [1000, 'Description cannot exceed 1000 characters']
   },
+  longDescription: {
+    type: String,
+    default: ''
+  },
+  features: [{
+    type: String,
+    trim: true
+  }],
   price: {
     type: Number,
     required: [true, 'Product price is required'],
@@ -54,6 +62,18 @@ const productSchema = new mongoose.Schema({
       type: String,
       default: ''
     },
+    dimensions: {
+      type: String,
+      default: ''
+    },
+    wax: {
+      type: String,
+      default: ''
+    },
+    wick: {
+      type: String,
+      default: ''
+    },
     size: {
       type: String,
       default: ''
@@ -86,7 +106,11 @@ const productSchema = new mongoose.Schema({
       type: Number,
       default: 0
     }
-  }
+  },
+  relatedProducts: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Product'
+  }]
 }, {
   timestamps: true
 });

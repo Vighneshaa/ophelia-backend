@@ -5,7 +5,7 @@ A Node.js/Express backend API for the Ophelia Candles e-commerce website.
 ## Features
 
 - RESTful API endpoints for products, categories, orders, and authentication
-- Mock data for development (ready for database integration)
+- MongoDB connection (Atlas or local); runs without DB if `MONGODB_URI` is not set
 - JWT-based authentication
 - Input validation and error handling
 - CORS enabled for frontend integration
@@ -23,14 +23,26 @@ A Node.js/Express backend API for the Ophelia Candles e-commerce website.
    npm install
    ```
 
-3. Create a `.env` file with your configuration (see `.env` for example)
+3. Create a `.env` file (copy from `.env.example`) and set:
+   - `MONGODB_URI` – your MongoDB connection string (e.g. MongoDB Atlas)
+   - Optionally `PORT` (default 3001) and `FRONTEND_URL`
 
 4. Start the development server:
    ```bash
    npm run dev
    ```
 
-The API will be available at `http://localhost:5000`
+The API will be available at `http://localhost:3001`. On startup you should see `MongoDB connected` if `MONGODB_URI` is set.
+
+**Create collections and seed data (categories + products):**
+
+MongoDB has no "tables"—it uses **collections**, which are created automatically when you first insert documents. To create the `categories` and `products` collections and fill them with initial data, run:
+
+```bash
+npm run seed
+```
+
+This drops existing categories/products in the `ophelia` database and inserts 3 categories and 10 products (same as the in-memory mock). Run it once after connecting to a new database, or anytime you want to reset that data.
 
 ## API Endpoints
 
@@ -56,9 +68,9 @@ The API will be available at `http://localhost:5000`
 - `PUT /api/auth/profile` - Update user profile (authenticated)
 
 ### Orders
-- `GET /api/orders` - Get orders
+- `GET /api/orders` - List all orders (stored in MongoDB)
 - `GET /api/orders/:id` - Get single order
-- `POST /api/orders` - Create new order
+- `POST /api/orders` - Create new order (saves to MongoDB)
 - `PUT /api/orders/:id/status` - Update order status (admin)
 
 ### Health Check
@@ -71,9 +83,9 @@ The API will be available at `http://localhost:5000`
 
 ## Next Steps
 
-1. Integrate with MongoDB database
+1. ~~Integrate with MongoDB database~~ (products, categories, orders stored in MongoDB)
 2. Add proper password hashing
 3. Implement file upload for product images
-4. Add email notifications
+4. Admin dashboard to view orders (GET /api/orders)
 5. Implement payment processing
 6. Add comprehensive testing

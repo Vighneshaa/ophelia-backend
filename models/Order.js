@@ -27,7 +27,7 @@ const orderSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: false
   },
   items: [orderItemSchema],
   shippingAddress: {
@@ -37,14 +37,14 @@ const orderSchema = new mongoose.Schema({
     phone: { type: String, required: true },
     street: { type: String, required: true },
     city: { type: String, required: true },
-    state: { type: String, required: true },
+    state: { type: String, default: '' },
     zipCode: { type: String, required: true },
-    country: { type: String, required: true }
+    country: { type: String, default: '' }
   },
   paymentInfo: {
     method: {
       type: String,
-      enum: ['credit_card', 'paypal', 'stripe'],
+      enum: ['credit_card', 'paypal', 'stripe', 'cod'],
       required: true
     },
     transactionId: String,

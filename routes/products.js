@@ -1,206 +1,161 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
+const Product = require('../models/Product');
+const Category = require('../models/Category');
 
-// Mock data for now (will be replaced with database later)
-let products = [
-  {
-    id: '1',
-    name: 'Vanilla Dreams Candle',
-    description: 'A luxurious vanilla-scented candle that fills your space with warmth and comfort. Made with premium soy wax and natural vanilla extract.',
-    price: 24.99,
-    originalPrice: 29.99,
-    category: 'scented',
-    images: [
-      {
-        url: '/api/placeholder/400/400',
-        alt: 'Vanilla Dreams Candle'
-      }
-    ],
-    inStock: true,
-    stockQuantity: 15,
-    featured: true,
+/** Map product doc (with populated category) to API response shape for frontend */
+function toProductResponse(doc) {
+  const cat = doc.category;
+  return {
+    id: doc._id.toString(),
+    name: doc.name,
+    price: doc.price,
+    originalPrice: doc.originalPrice,
+    categoryId: cat ? cat._id.toString() : '',
+    category: cat ? { id: cat._id.toString(), name: cat.name, slug: cat.slug } : null,
+    description: doc.description,
+    longDescription: doc.longDescription || '',
+    images: (doc.images || []).map((i) => (typeof i === 'string' ? i : i.url)),
+    features: doc.features || [],
     specifications: {
-      burnTime: '40-45 hours',
-      size: '3.5" x 4"',
-      weight: '10 oz',
-      scent: 'Vanilla',
-      waxType: 'Soy Wax'
+      burnTime: (doc.specifications && doc.specifications.burnTime) || '',
+      wax: (doc.specifications && doc.specifications.wax) || '',
+      wick: (doc.specifications && doc.specifications.wick) || '',
+      dimensions: (doc.specifications && doc.specifications.dimensions) || '',
+      weight: (doc.specifications && doc.specifications.weight) || ''
     },
-    tags: ['vanilla', 'relaxing', 'bedroom'],
-    rating: {
-      average: 4.8,
-      count: 24
-    }
-  },
-  {
-    id: '2',
-    name: 'Ocean Breeze Candle',
-    description: 'Transport yourself to the seaside with this refreshing ocean-inspired candle. Features notes of sea salt, driftwood, and fresh ocean air.',
-    price: 22.99,
-    originalPrice: 26.99,
-    category: 'scented',
-    images: [
-      {
-        url: '/api/placeholder/400/400',
-        alt: 'Ocean Breeze Candle'
-      }
-    ],
-    inStock: true,
-    stockQuantity: 8,
-    featured: true,
-    specifications: {
-      burnTime: '35-40 hours',
-      size: '3.5" x 4"',
-      weight: '10 oz',
-      scent: 'Ocean Breeze',
-      waxType: 'Soy Wax'
-    },
-    tags: ['ocean', 'fresh', 'living room'],
-    rating: {
-      average: 4.6,
-      count: 18
-    }
-  },
-  {
-    id: '3',
-    name: 'Lavender Serenity Candle',
-    description: 'Unwind and relax with the calming scent of pure lavender. Perfect for meditation, yoga, or a peaceful evening at home.',
-    price: 26.99,
-    category: 'aromatherapy',
-    images: [
-      {
-        url: '/api/placeholder/400/400',
-        alt: 'Lavender Serenity Candle'
-      }
-    ],
-    inStock: true,
-    stockQuantity: 12,
-    featured: false,
-    specifications: {
-      burnTime: '45-50 hours',
-      size: '3.5" x 4.5"',
-      weight: '12 oz',
-      scent: 'Lavender',
-      waxType: 'Soy Wax'
-    },
-    tags: ['lavender', 'relaxing', 'aromatherapy'],
-    rating: {
-      average: 4.9,
-      count: 31
-    }
-  },
-  {
-    id: '4',
-    name: 'Cinnamon Spice Candle',
-    description: 'Warm up your home with the cozy scent of cinnamon and spices. Perfect for fall and winter seasons.',
-    price: 23.99,
-    category: 'seasonal',
-    images: [
-      {
-        url: '/api/placeholder/400/400',
-        alt: 'Cinnamon Spice Candle'
-      }
-    ],
-    inStock: true,
-    stockQuantity: 20,
-    featured: false,
-    specifications: {
-      burnTime: '38-42 hours',
-      size: '3.5" x 4"',
-      weight: '10 oz',
-      scent: 'Cinnamon Spice',
-      waxType: 'Soy Wax'
-    },
-    tags: ['cinnamon', 'spice', 'cozy', 'winter'],
-    rating: {
-      average: 4.7,
-      count: 15
-    }
+    inStock: doc.inStock !== false,
+    rating: (doc.rating && doc.rating.average) || 0,
+    reviews: (doc.rating && doc.rating.count) || 0,
+    tags: doc.tags || [],
+    relatedProducts: (doc.relatedProducts || []).map((o) => (o._id ? o._id.toString() : o.toString()))
+  };
+}
+
+// GET /api/products/featured - Get featured products
+router.get('/featured', async (req, res) => {
+  try {
+    const docs = await Product.find({ featured: true, inStock: true })
+      .limit(6)
+      .populate('category', 'name slug')
+      .lean();
+    res.json(docs.map(toProductResponse));
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching featured products', error: error.message });
   }
-];
+});
+
+// GET /api/products/category/:categoryId - Get products by category ID or slug
+router.get('/category/:categoryId', async (req, res) => {
+  try {
+    const { categoryId } = req.params;
+    const isObjectId = mongoose.Types.ObjectId.isValid(categoryId) && String(categoryId).length === 24;
+    const category = await Category.findOne(
+      isObjectId ? { _id: categoryId } : { slug: categoryId }
+    ).lean();
+    if (!category) {
+      return res.status(404).json({ message: 'Category not found' });
+    }
+    const docs = await Product.find({ category: category._id, inStock: true })
+      .populate('category', 'name slug')
+      .lean();
+    res.json(docs.map(toProductResponse));
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching products by category', error: error.message });
+  }
+});
+
+// GET /api/products/:id/related - Get related products
+router.get('/:id/related', async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id)
+      .populate({ path: 'relatedProducts', populate: { path: 'category', select: 'name slug' } })
+      .lean();
+    if (!product || !product.relatedProducts || product.relatedProducts.length === 0) {
+      return res.json([]);
+    }
+    res.json(product.relatedProducts.map(toProductResponse));
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching related products', error: error.message });
+  }
+});
+
+// GET /api/products/:id - Get single product by ID
+router.get('/:id', async (req, res) => {
+  try {
+    const doc = await Product.findById(req.params.id).populate('category', 'name slug').lean();
+    if (!doc) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+    res.json(toProductResponse(doc));
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching product', error: error.message });
+  }
+});
 
 // GET /api/products - Get all products with filtering and pagination
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const { 
-      category, 
-      featured, 
-      inStock, 
-      minPrice, 
-      maxPrice, 
-      search, 
-      page = 1, 
+    const {
+      category,
+      featured,
+      inStock,
+      minPrice,
+      maxPrice,
+      search,
+      page = 1,
       limit = 12,
       sortBy = 'name',
       sortOrder = 'asc'
     } = req.query;
 
-    let filteredProducts = [...products];
+    const filter = {};
 
-    // Apply filters
     if (category) {
-      filteredProducts = filteredProducts.filter(p => p.category === category);
+      const isObjId = mongoose.Types.ObjectId.isValid(category) && String(category).length === 24;
+      const cat = await Category.findOne(isObjId ? { _id: category } : { slug: category }).lean();
+      if (cat) filter.category = cat._id;
     }
 
-    if (featured !== undefined) {
-      filteredProducts = filteredProducts.filter(p => p.featured === (featured === 'true'));
-    }
-
-    if (inStock !== undefined) {
-      filteredProducts = filteredProducts.filter(p => p.inStock === (inStock === 'true'));
-    }
-
-    if (minPrice) {
-      filteredProducts = filteredProducts.filter(p => p.price >= parseFloat(minPrice));
-    }
-
-    if (maxPrice) {
-      filteredProducts = filteredProducts.filter(p => p.price <= parseFloat(maxPrice));
+    if (featured === 'true') filter.featured = true;
+    if (inStock !== undefined) filter.inStock = inStock === 'true';
+    if (minPrice != null || maxPrice != null) {
+      filter.price = {};
+      if (minPrice != null) filter.price.$gte = parseFloat(minPrice);
+      if (maxPrice != null) filter.price.$lte = parseFloat(maxPrice);
     }
 
     if (search) {
-      const searchLower = search.toLowerCase();
-      filteredProducts = filteredProducts.filter(p => 
-        p.name.toLowerCase().includes(searchLower) ||
-        p.description.toLowerCase().includes(searchLower) ||
-        p.tags.some(tag => tag.toLowerCase().includes(searchLower))
-      );
+      filter.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { tags: { $in: [new RegExp(search, 'i')] } }
+      ];
     }
 
-    // Apply sorting
-    filteredProducts.sort((a, b) => {
-      let aValue = a[sortBy];
-      let bValue = b[sortBy];
+    const sort = { [sortBy]: sortOrder === 'desc' ? -1 : 1 };
+    if (sortBy === 'rating') {
+      sort['rating.average'] = sortOrder === 'desc' ? -1 : 1;
+      delete sort.rating;
+    }
 
-      if (sortBy === 'rating') {
-        aValue = a.rating.average;
-        bValue = b.rating.average;
-      }
+    const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
+    const limitNum = parseInt(limit, 10);
 
-      if (typeof aValue === 'string') {
-        aValue = aValue.toLowerCase();
-        bValue = bValue.toLowerCase();
-      }
-
-      if (sortOrder === 'desc') {
-        return bValue > aValue ? 1 : -1;
-      }
-      return aValue > bValue ? 1 : -1;
-    });
-
-    // Apply pagination
-    const startIndex = (parseInt(page) - 1) * parseInt(limit);
-    const endIndex = startIndex + parseInt(limit);
-    const paginatedProducts = filteredProducts.slice(startIndex, endIndex);
+    const [docs, totalProducts] = await Promise.all([
+      Product.find(filter).sort(sort).skip(skip).limit(limitNum).populate('category', 'name slug').lean(),
+      Product.countDocuments(filter)
+    ]);
 
     res.json({
-      products: paginatedProducts,
+      products: docs.map(toProductResponse),
       pagination: {
-        currentPage: parseInt(page),
-        totalPages: Math.ceil(filteredProducts.length / parseInt(limit)),
-        totalProducts: filteredProducts.length,
-        hasNext: endIndex < filteredProducts.length,
-        hasPrev: startIndex > 0
+        currentPage: parseInt(page, 10),
+        totalPages: Math.ceil(totalProducts / limitNum) || 1,
+        totalProducts,
+        hasNext: skip + docs.length < totalProducts,
+        hasPrev: skip > 0
       }
     });
   } catch (error) {
@@ -208,73 +163,46 @@ router.get('/', (req, res) => {
   }
 });
 
-// GET /api/products/featured - Get featured products
-router.get('/featured', (req, res) => {
-  try {
-    const featuredProducts = products.filter(p => p.featured && p.inStock);
-    res.json(featuredProducts);
-  } catch (error) {
-    res.status(500).json({ message: 'Error fetching featured products', error: error.message });
-  }
-});
-
-// GET /api/products/:id - Get single product by ID
-router.get('/:id', (req, res) => {
-  try {
-    const product = products.find(p => p.id === req.params.id);
-    
-    if (!product) {
-      return res.status(404).json({ message: 'Product not found' });
-    }
-
-    res.json(product);
-  } catch (error) {
-    res.status(500).json({ message: 'Error fetching product', error: error.message });
-  }
-});
-
 // POST /api/products - Create new product (admin only)
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   try {
-    const newProduct = {
-      id: (products.length + 1).toString(),
-      ...req.body,
-      rating: { average: 0, count: 0 }
-    };
-
-    products.push(newProduct);
-    res.status(201).json(newProduct);
+    const body = { ...req.body };
+    if (body.images && Array.isArray(body.images) && body.images.length > 0 && typeof body.images[0] === 'string') {
+      body.images = body.images.map((url) => ({ url, alt: '' }));
+    }
+    if (!body.rating) body.rating = { average: 0, count: 0 };
+    const doc = await Product.create(body);
+    const populated = await Product.findById(doc._id).populate('category', 'name slug').lean();
+    res.status(201).json(toProductResponse(populated));
   } catch (error) {
     res.status(500).json({ message: 'Error creating product', error: error.message });
   }
 });
 
 // PUT /api/products/:id - Update product (admin only)
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
-    const productIndex = products.findIndex(p => p.id === req.params.id);
-    
-    if (productIndex === -1) {
+    const doc = await Product.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true, runValidators: true }
+    ).populate('category', 'name slug').lean();
+    if (!doc) {
       return res.status(404).json({ message: 'Product not found' });
     }
-
-    products[productIndex] = { ...products[productIndex], ...req.body };
-    res.json(products[productIndex]);
+    res.json(toProductResponse(doc));
   } catch (error) {
     res.status(500).json({ message: 'Error updating product', error: error.message });
   }
 });
 
 // DELETE /api/products/:id - Delete product (admin only)
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
-    const productIndex = products.findIndex(p => p.id === req.params.id);
-    
-    if (productIndex === -1) {
+    const doc = await Product.findByIdAndDelete(req.params.id);
+    if (!doc) {
       return res.status(404).json({ message: 'Product not found' });
     }
-
-    products.splice(productIndex, 1);
     res.json({ message: 'Product deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting product', error: error.message });
